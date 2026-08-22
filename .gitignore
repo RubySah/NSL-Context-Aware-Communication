@@ -1,0 +1,59 @@
+# --- Python ---
+__pycache__/
+*.pyc
+venv/
+myenv312/
+*.egg-info/
+
+# --- IDE / OS ---
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# --- Dataset (raw + derived, too large for git) ---
+data/processed/
+data/augmented/
+data/splits/
+NSL_Split_Dataset/
+NSL_Additional_20Class_Frames/
+*.mp4
+*.avi
+# data/metadata/ (class_mapping.json, dataset_summary.csv, etc.) is tracked
+
+# --- Model checkpoints / weights ---
+*.pt
+*.pth
+*.onnx
+*.h5
+*.ckpt
+checkpoints/
+runs/
+
+# --- Pretrained model caches (YOLOv8, CLIP, T5, NLLB, Piper) ---
+*.yaml.bak
+yolov8*.pt
+.cache/
+~/.cache/
+huggingface/
+torch_hub/
+piper_voices/
+*.onnx.json
+
+# --- Logs / experiment tracking ---
+logs/
+wandb/
+lightning_logs/
+tensorboard/
+
+# --- Jupyter / Colab ---
+.ipynb_checkpoints/
+
+# --- Config secrets ---
+.env
+*.local.yaml
+
+# --- Misc build artifacts ---
+build/
+dist/
+*.egg

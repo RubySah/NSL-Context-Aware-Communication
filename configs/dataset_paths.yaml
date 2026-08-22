@@ -1,0 +1,23 @@
+# Dataset path configuration.
+# Both sources are pre-extracted frame folders (640x480 RGB images) —
+# Source A is NOT raw video anymore, so both use the same loading path
+# (load_frames_from_folder in extract_landmarks.py), just with different
+# per-sample frame counts.
+
+source_a:
+  type: frame_folder
+  frame_count: variable  
+  local:
+    root: "D:/Ruby/projects/Major Project/NSL_Split_Dataset"
+  colab:
+    root: "/content/drive/MyDrive/Major Project/NSL_Split_Dataset"
+
+source_b:
+  type: frame_folder
+  frame_count: 25   
+  local:
+    root: "D:/Ruby/projects/Major Project/NSL_Additional_20Class_Frames"
+  colab:
+    root: "/content/drive/MyDrive/Major Project/NSL_Additional_20Class_Frames"
+
+active_profile: local   # switch to "colab" when running in Colab

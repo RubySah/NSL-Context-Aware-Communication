@@ -1,5 +1,3 @@
-%%writefile src/training/train.py
-
 # src/training (NSL gesture recognition — model training)
 
 import os, json, copy, random

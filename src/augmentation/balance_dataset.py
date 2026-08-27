@@ -1,14 +1,25 @@
 # src/augmentation/balance_dataset.py
-"""Per-split augmentation planning and Source B temporal resampling."""
+"""Per-split augmentation planning.
+"""
 from dataclasses import dataclass, asdict
 import csv
 import numpy as np
 
-MIN_TARGET = 280
-MAX_TARGET = 300
-TARGET_TOTAL = 290
-SPLIT_RATIO = {"train": 0.70, "val": 0.15, "test": 0.15}
-SOURCE_B_TARGET_LENGTH = 40  # single fixed target, not a range
+TRAIN_TARGET_MIN = 170
+TRAIN_TARGET_MAX = 180
+TRAIN_TARGET = 175  # preferred aim point within [MIN, MAX]
+
+# val/test raised from 25-30 -> 37-38 so the FINAL per-class ratio
+# (train=175, val=38, test=37, total=250) approximates 70:15:15
+# (69.5%/15.2%/14.8% w/ val=38, or symmetric 37/38 split -- see note below).
+# Since val/test are original-only (never augmented), hitting this target
+# requires enough originals set aside at split time -- see rebalance_splits.py,
+# which moves spare train originals into val/test when a class is short.
+VAL_TARGET_MIN = 37
+VAL_TARGET_MAX = 38
+
+TEST_TARGET_MIN = 37
+TEST_TARGET_MAX = 38
 
 
 @dataclass
@@ -32,43 +43,53 @@ class ClassBalancePlan:
     note: str
 
 
-def _desired_split_counts(total: int) -> SplitCounts:
-    """Each split's target is rounded independently from SPLIT_RATIO —
-    no remainder-absorption into train, so the ratio holds per split."""
-    return SplitCounts(
-        train=round(total * SPLIT_RATIO["train"]),
-        val=round(total * SPLIT_RATIO["val"]),
-        test=round(total * SPLIT_RATIO["test"]),
-    )
-
-
 def plan_class_balancing(class_name: str, real: SplitCounts) -> ClassBalancePlan:
-    desired = _desired_split_counts(TARGET_TOTAL)
+    """Plans augmentation counts for a class.
 
-    aug_train = max(0, desired.train - real.train)
-    aug_val = max(0, desired.val - real.val)
-    aug_test = max(0, desired.test - real.test)
+    Only `train` is ever augmented. If a class already has >= TRAIN_TARGET_MIN
+    original training samples, no augmentation is added (and nothing is ever
+    removed -- originals are always preserved). Val and test are passed
+    through untouched: they contain only original data, per the "no
+    augmentation on validation or test" requirement.
+    """
+    if real.train >= TRAIN_TARGET_MIN:
+        aug_train = 0
+    else:
+        aug_train = TRAIN_TARGET - real.train
+
+    # Val/test are never augmented -- originals only.
+    aug_val = 0
+    aug_test = 0
 
     augment = SplitCounts(aug_train, aug_val, aug_test)
     final = SplitCounts(
         train=real.train + aug_train,
-        val=real.val + aug_val,
-        test=real.test + aug_test,
+        val=real.val,
+        test=real.test,
     )
 
-    if not (MIN_TARGET <= final.total <= MAX_TARGET):
-        raise AssertionError(
-            f"{class_name}: final total {final.total} outside "
-            f"[{MIN_TARGET}, {MAX_TARGET}]"
+    # Soft/contextual checks -- this function may be called with only one
+    # split's real count populated (see generate_augmented.py, which calls
+    # it once per split), so we only validate the split(s) actually present
+    # rather than asserting a fixed global total.
+    warnings = []
+    if real.train > 0 and not (TRAIN_TARGET_MIN <= final.train <= TRAIN_TARGET_MAX + 5):
+        warnings.append(
+            f"train final={final.train} outside expected "
+            f"[{TRAIN_TARGET_MIN}, {TRAIN_TARGET_MAX}] range"
         )
+    if real.val > 0 and not (VAL_TARGET_MIN <= real.val <= VAL_TARGET_MAX):
+        warnings.append(f"val real={real.val} outside expected [{VAL_TARGET_MIN}, {VAL_TARGET_MAX}] range")
+    if real.test > 0 and not (TEST_TARGET_MIN <= real.test <= TEST_TARGET_MAX):
+        warnings.append(f"test real={real.test} outside expected [{TEST_TARGET_MIN}, {TEST_TARGET_MAX}] range")
 
     needs_augmentation = augment.total > 0
-    note = (
-        f"real_total={real.total}, already meets target"
+    base_note = (
+        f"real_total={real.total}, already meets train target"
         if not needs_augmentation
-        else f"real_total={real.total}, augmenting toward "
-             f"{desired.train}/{desired.val}/{desired.test}"
+        else f"real_total={real.total}, augmenting train {real.train} -> {final.train}"
     )
+    note = base_note if not warnings else base_note + " | " + "; ".join(warnings)
 
     return ClassBalancePlan(class_name, real, augment, final, needs_augmentation, note)
 
@@ -106,7 +127,12 @@ def save_augmentation_plan(plans: list, out_path: str) -> None:
 
 
 def resample_sequence(sequence, target_length: int):
-    """Linear interpolation of a landmark sequence along the time axis."""
+    """Linear interpolation of a landmark sequence along the time axis.
+
+    General-purpose helper (not Source-B-specific). Used by
+    augment_transforms.py for the temporal speed-variation augmentation,
+    which shortens/lengthens an individual training sample slightly.
+    """
     seq = np.asarray(sequence, dtype=np.float32)
     original_length = seq.shape[0]
     if original_length == target_length:
@@ -125,25 +151,13 @@ def resample_sequence(sequence, target_length: int):
     return resampled.reshape((target_length,) + tail_shape)
 
 
-def resample_source_b_sequence(sequence, target_length: int = SOURCE_B_TARGET_LENGTH):
-    """Resamples Source B's 25-frame landmark sequences to ~40 frames,
-    once at preprocessing time. Source A is left at its natural length —
-    both feed the Transformer as variable-length, padded/masked at batch time."""
-    return resample_sequence(sequence, target_length=target_length)
-
-
 if __name__ == "__main__":
     sample_class_counts = {
-        "Play": {"train": 84, "val": 18, "test": 18},
-        "Fever": {"train": 122, "val": 26, "test": 26},
-        "Hospital": {"train": 125, "val": 26, "test": 27},
-        "Book": {"train": 100, "val": 0, "test": 0},
+        "Play": {"train": 84, "val": 27, "test": 26},
+        "Fever": {"train": 122, "val": 28, "test": 26},
+        "Hospital": {"train": 175, "val": 26, "test": 27},
+        "Book": {"train": 200, "val": 25, "test": 25},
     }
     for cn, counts in sample_class_counts.items():
         p = plan_class_balancing(cn, SplitCounts(**counts))
         print(cn, asdict(p))
-
-    fake_25 = np.random.rand(25, 291).astype("float32")
-    resampled = resample_source_b_sequence(fake_25)
-    print(f"\nSource B resample: 25 -> {resampled.shape[0]} frames, "
-          f"feature dim preserved: {resampled.shape[1] == fake_25.shape[1]}")

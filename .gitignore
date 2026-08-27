@@ -24,6 +24,7 @@ NSL_Additional_20Class_Frames/
 # --- Model checkpoints / weights ---
 *.pt
 *.pth
+*.keras
 *.onnx
 *.h5
 *.ckpt
@@ -58,3 +59,6 @@ build/
 dist/
 *.egg
 *.zip
+
+data/metadata/*.csv
+*.npy

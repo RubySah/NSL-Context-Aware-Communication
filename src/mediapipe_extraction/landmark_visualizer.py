@@ -1,13 +1,12 @@
 """Draw detected pose and hand landmarks."""
 
-import cv2
 import mediapipe as mp
 
 
 class LandmarkVisualizer:
     def __init__(self):
-        self.connections = mp.solutions.holistic
-        self.drawer = mp.solutions.drawing_utils
+        self.mp_holistic = mp.solutions.holistic
+        self.mp_drawing = mp.solutions.drawing_utils
 
     def draw(self, frame, results):
         if results.pose_landmarks:

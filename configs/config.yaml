@@ -13,7 +13,7 @@ model:
 paths:
   dataset: data/final_dataset
   class_mapping: data/metadata/class_mapping.json
-  checkpoint: models\gesture_transformer\best\best_model2.pth
+  checkpoint: models/gesture_transformer/best/best_model2.pth
   sentence_log: logs/detected_sentences.txt
 
 device:

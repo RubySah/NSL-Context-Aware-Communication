@@ -1,106 +1,96 @@
-# src/augmentation/generate_augmented.py
-"""Generates augmented landmark files to meet the per-split balancing targets."""
+"""Generates augmented landmark samples for training only."""
 
-import os
-import csv
 import numpy as np
-from collections import defaultdict
 
-from balance_dataset import plan_class_balancing, SplitCounts
-from augment_transforms import AUGMENTATIONS
+from pathlib import Path
 
-SPLITS = ("train", "val", "test")
-AUGMENTATIONS_ORDER = sorted(AUGMENTATIONS.keys())  # fixed order so rng.choice is deterministic
+from augment_transforms import apply_random_augmentation
 
 
-def load_manifest(path: str) -> list:
-    with open(path, newline="", encoding="utf-8") as f:
-        return list(csv.DictReader(f))
+PROJECT_ROOT = Path(
+    r"D:\Ruby\projects\Major Project\NSL_Context_Aware_Communication"
+)
+
+TRAIN_DIR = PROJECT_ROOT / "data" / "processed" / "train"
+
+TARGET_PER_CLASS = 182
+RANDOM_SEED = 42
 
 
-def real_counts_by_class(rows: list) -> dict:
-    counts = defaultdict(int)
-    for row in rows:
-        counts[row["class_name"]] += 1
-    return counts
+def get_original_files(class_dir):
+    """Returns original landmark files, excluding augmented samples."""
+
+    return sorted(
+        path for path in class_dir.glob("*.npy")
+        if not path.stem.startswith("aug_")
+    )
 
 
-def generate_for_split(split: str, data_root: str, rng: np.random.Generator) -> list:
-    manifest_path = os.path.join(data_root, "splits", f"{split}_manifest.csv")
-    rows = load_manifest(manifest_path)
-    counts = real_counts_by_class(rows)
+def augment_class(class_dir, rng):
+    """Augments a class until it reaches the target sample count."""
 
-    samples_by_class = defaultdict(list)
-    for row in rows:
-        samples_by_class[row["class_name"]].append(row)
+    originals = get_original_files(class_dir)
+    existing = list(class_dir.glob("*.npy"))
 
-    summary_rows = []
-    for class_name, count in counts.items():
-        split_counts = {"train": 0, "val": 0, "test": 0}
-        split_counts[split] = count
-        plan = plan_class_balancing(class_name, SplitCounts(
-            train=split_counts["train"], val=split_counts["val"], test=split_counts["test"]
-        ))
-        n_needed = getattr(plan.augment, "val" if split == "val" else split)
+    needed = TARGET_PER_CLASS - len(existing)
 
-        if n_needed == 0:
+    if needed <= 0 or not originals:
+        return len(originals), 0, len(existing)
+
+    generated = 0
+    index = 1
+
+    while generated < needed:
+        source = rng.choice(originals)
+        seq = np.load(source, allow_pickle=False)
+
+        augmented, _ = apply_random_augmentation(seq, rng)
+
+        output = class_dir / f"aug_{source.stem}_{index:05d}.npy"
+        index += 1
+
+        if output.exists():
             continue
 
-        # Written directly into data/processed, merged with real samples in the
-        # same per-class folder -- not a separate data/augmented tree.
-        out_dir = os.path.join(data_root, "processed", split, class_name)
-        os.makedirs(out_dir, exist_ok=True)
-        real_samples = samples_by_class[class_name]
+        np.save(output, augmented.astype(np.float32))
+        generated += 1
 
-        for i in range(n_needed):
-            parent = real_samples[i % len(real_samples)]
-            parent_path = os.path.join(
-                data_root, "processed", split, class_name, f"{parent['sample_id']}.npy"
-            )
+    final_count = len(list(class_dir.glob("*.npy")))
 
-            seed = rng.integers(0, 2**31 - 1)
-            local_rng = np.random.default_rng(seed)
-            aug_type = local_rng.choice(list(AUGMENTATIONS_ORDER))
-
-            aug_id = f"aug_{class_name}_{i}"
-            out_path = os.path.join(out_dir, f"{aug_id}.npy")
-
-            if os.path.exists(out_path):
-                augmented_seq = np.load(out_path)
-            else:
-                seq = np.load(parent_path)
-                augmented_seq = AUGMENTATIONS[aug_type](seq, local_rng)
-                np.save(out_path, augmented_seq)
-
-            summary_rows.append({
-                "sample_id": aug_id,
-                "class_name": class_name,
-                "split": split,
-                "parent_sample_id": parent["sample_id"],
-                "augmentation_type": aug_type,
-                "augmentation_seed": int(seed),
-                "processed_sequence_length": augmented_seq.shape[0],
-                "is_augmented": True,
-            })
-
-    return summary_rows
+    return len(originals), generated, final_count
 
 
-def main(data_root: str = "data", seed: int = 42) -> None:
-    rng = np.random.default_rng(seed)
-    all_rows = []
-    for split in SPLITS:
-        rows = generate_for_split(split, data_root, rng)
-        all_rows += rows
-        print(f"{split}: generated {len(rows)} augmented samples")
+def generate_augmented_dataset():
+    """Balances training classes through landmark augmentation."""
 
-    summary_path = os.path.join(data_root, "metadata", "augmentation_summary.csv")
-    os.makedirs(os.path.dirname(summary_path), exist_ok=True)
-    with open(summary_path, "w", newline="", encoding="utf-8") as f:
-        writer = csv.DictWriter(f, fieldnames=list(all_rows[0].keys()) if all_rows else [])
-        writer.writeheader()
-        writer.writerows(all_rows)
+    if not TRAIN_DIR.exists():
+        raise FileNotFoundError(TRAIN_DIR)
+
+    rng = np.random.default_rng(RANDOM_SEED)
+
+    results = []
+
+    for class_dir in sorted(TRAIN_DIR.iterdir()):
+        if not class_dir.is_dir():
+            continue
+
+        original, generated, final = augment_class(class_dir, rng)
+
+        results.append((class_dir.name, original, generated, final))
+
+    print("\nTRAINING AUGMENTATION SUMMARY")
+    print("-" * 65)
+    print(f"{'Class':<22}{'Original':>10}{'Generated':>12}{'Final':>10}")
+    print("-" * 65)
+
+    for name, original, generated, final in results:
+        print(f"{name:<22}{original:>10}{generated:>12}{final:>10}")
+
+    print("-" * 65)
+    print(f"Total classes: {len(results)}")
+    print(f"Total generated: {sum(r[2] for r in results)}")
+    print(f"Total training samples: {sum(r[3] for r in results)}")
 
 
 if __name__ == "__main__":
-    main()
+    generate_augmented_dataset()

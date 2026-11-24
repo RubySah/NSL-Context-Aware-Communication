@@ -1,0 +1,36 @@
+project:
+  num_classes: 52
+  feature_dim: 291
+  fixed_length: 100
+
+model:
+  d_model: 160
+  num_heads: 4
+  num_layers: 4
+  d_ff: 256
+  dropout: 0.35
+
+paths:
+  dataset: data/final_dataset
+  class_mapping: data/metadata/class_mapping.json
+  checkpoint: models\gesture_transformer\best\best_model2.pth
+  sentence_log: logs/detected_sentences.txt
+
+device:
+  use_cuda: true
+
+recognition:
+  min_frames: 20
+  max_frames: 80
+  check_interval: 5
+  start_threshold: 0.90
+  end_threshold: 0.55
+
+motion:
+  velocity_threshold: 0.004
+  word_pause_seconds: 0.4
+  sentence_pause_seconds: 1.0
+
+context:
+  model: ViT-B/32
+  scene_detection_interval: 30

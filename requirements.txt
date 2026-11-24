@@ -3,10 +3,9 @@ opencv-python>=4.8
 numpy>=1.26,<2.0
 PyYAML>=6.0
 pandas>=2.0
-
-# --- Needed for LATER pipeline stages (not required yet) ---
-# torch, torchvision           -> Transformer gesture recognition model
-# ultralytics                  -> YOLOv8s object detection
-# open_clip_torch (or CLIP)    -> CLIP ViT-B/32 scene understanding
-# transformers, sentencepiece  -> T5-small (gloss-to-text) + NLLB-200 (EN->NE translation)
-# piper-tts                    -> English + Nepali text-to-speech
+torch
+Pillow
+ftfy
+regex
+tqdm
+git+https://github.com/openai/CLIP.git

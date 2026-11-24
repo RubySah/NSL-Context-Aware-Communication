@@ -1,64 +1,79 @@
-# --- Python ---
-__pycache__/
-*.pyc
-venv/
-myenv312/
-*.egg-info/
 
-# --- IDE / OS ---
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+venv/
+myenv/
+myenv312/
+
+# IDE / OS
 .vscode/
 .idea/
 .DS_Store
 Thumbs.db
 
-# --- Dataset (raw + derived, too large for git) ---
+# Datasets
+data/raw/
+data/interim/
 data/processed/
 data/augmented/
 data/splits/
+data/final_dataset/
 NSL_Split_Dataset/
 NSL_Additional_20Class_Frames/
 *.mp4
 *.avi
-# data/metadata/ (class_mapping.json, dataset_summary.csv, etc.) is tracked
+*.mov
 
-# --- Model checkpoints / weights ---
+# Keep dataset metadata and class mapping tracked
+!data/metadata/
+!data/metadata/class_mapping.json
+data/metadata/*.csv
+
+# Model checkpoints and weights
 *.pt
 *.pth
 *.keras
 *.onnx
 *.h5
 *.ckpt
+*.task
 checkpoints/
 runs/
+models/
 
-# --- Pretrained model caches (YOLOv8, CLIP, T5, NLLB, Piper) ---
-*.yaml.bak
-yolov8*.pt
+# Keep model-related source/configuration if present
+!models/
+!models/**/
+
+# Pretrained model caches
 .cache/
-~/.cache/
 huggingface/
 torch_hub/
 piper_voices/
 *.onnx.json
+*.yaml.bak
 
-# --- Logs / experiment tracking ---
+# Logs and experiment tracking
 logs/
 wandb/
 lightning_logs/
 tensorboard/
 
-# --- Jupyter / Colab ---
+# Jupyter / Colab
 .ipynb_checkpoints/
 
-# --- Config secrets ---
+# Config secrets
 .env
 *.local.yaml
 
-# --- Misc build artifacts ---
+# Build artifacts
 build/
 dist/
 *.egg
 *.zip
 
-data/metadata/*.csv
+# NumPy generated files
 *.npy
+*.npz

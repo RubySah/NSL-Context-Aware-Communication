@@ -1,40 +1,46 @@
-"""Classify the environment using CLIP in a background thread."""
+"""Two-stage scene understanding with CLIP, run in a background thread."""
 
+import json
+import os
+import re
 import threading
 import time
+import traceback
+from collections import deque
 
 import torch
 
 from src.context.clip_model import CLIPModel
+from src.context.scene_prompts import SCENE_PROMPTS, SCENE_OBJECTS, OBJECT_TEMPLATE
 
 
-SCENE_PROMPTS = [
-    "A person inside a hospital.",
-    "A person inside a classroom.",
-    "A person inside a home living room.",
-    "A person on an outdoor street or public place.",
-    "A person inside an office.",
-    "A person inside a kitchen or dining area.",
-    "A person inside a shop or market.",
-    "A person inside a library or study room.",
-    "A person inside a pharmacy or medical shop.",
-    "A person inside a waiting room or reception.",
-    "A person inside a restaurant or cafe.",
-    "A person inside a community center.",
-]
+# "a hospital bed" -> "hospital bed"
+def clean_name(text):
+    return re.sub(r"^(a|an|the)\s+", "", text.strip().lower())
 
 
 class SceneDetector:
     def __init__(self, config):
-        self.interval = config["context"]["scene_interval_seconds"]
+        settings = config["context"]
+        self.interval = settings["scene_interval_seconds"]
+        self.top_k = settings["object_top_k"]
+        self.min_similarity = settings["object_min_similarity"]
+        self.json_path = config["paths"]["context_json"]
+
         self.clip_model = CLIPModel(
-            config["context"]["model"],
+            settings["model"],
             config["device"],
             SCENE_PROMPTS,
+            SCENE_OBJECTS,
+            OBJECT_TEMPLATE,
         )
 
-        self.current_scene = "Detecting..."
-        self.current_score = 0.0
+        self.history = deque(maxlen=settings["smoothing_window"])
+        self.context = {
+            "environment": "detecting...",
+            "environment_confidence": 0.0,
+            "visual_context": [],
+        }
 
         self._pending = None
         self._last_submit = 0.0
@@ -52,9 +58,9 @@ class SceneDetector:
                 self._pending = frame.copy()
             self._last_submit = now
 
-        return self.current_scene, self.current_score
+        return self.context["environment"], self.context["environment_confidence"] * 100
 
-    # Background loop: classify whatever frame was submitted last.
+    # Background loop: analyze whatever frame was submitted last, then save the JSON.
     def _worker(self):
         while not self._stop.is_set():
             with self._lock:
@@ -64,17 +70,45 @@ class SceneDetector:
                 time.sleep(0.05)
                 continue
 
-            self.current_scene, self.current_score = self._classify(frame)
+            try:
+                self.context = self._analyze(frame)
+                self._save(self.context)
+            except Exception:
+                traceback.print_exc()
 
     @torch.inference_mode()
-    def _classify(self, frame):
-        image_features = self.clip_model.encode_image(frame)
-        similarities = 100.0 * image_features @ self.clip_model.text_features.T
-        probabilities = similarities.softmax(dim=-1)[0]
-        index = int(probabilities.argmax())
+    def _analyze(self, frame):
+        features = self.clip_model.encode_image(frame)
 
-        scene = SCENE_PROMPTS[index].replace("A person ", "").rstrip(".")
-        return scene, float(probabilities[index]) * 100
+        # Stage 1: environment, averaged over the last few detections to avoid flicker.
+        self.history.append(self.clip_model.scene_probabilities(features))
+        probabilities = torch.stack(list(self.history)).mean(dim=0)
+        index = int(probabilities.argmax())
+        scene = self.clip_model.scene_names[index]
+
+        # Stage 2: objects, taken only from the chosen scene's own list.
+        objects = self.clip_model.top_objects(
+            features, scene, self.top_k, self.min_similarity
+        )
+
+        return {
+            "environment": scene.lower(),
+            "environment_confidence": round(float(probabilities[index]), 2),
+            "visual_context": [clean_name(name) for name in objects],
+        }
+
+    # Write the JSON atomically so a reader never sees a half-written file.
+    def _save(self, context):
+        try:
+            self.json_path.parent.mkdir(parents=True, exist_ok=True)
+            temp = self.json_path.with_suffix(".tmp")
+
+            with temp.open("w", encoding="utf-8") as file:
+                json.dump(context, file, indent=2)
+
+            os.replace(temp, self.json_path)
+        except OSError:
+            pass   # file busy (e.g. open elsewhere); the next cycle will retry
 
     def close(self):
         self._stop.set()

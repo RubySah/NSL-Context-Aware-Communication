@@ -15,6 +15,8 @@ paths:
   class_mapping: data/metadata/class_mapping.json
   checkpoint: models/gesture_transformer/best/best_model3.pth
   sentence_log: logs/detected_sentences.txt
+  # ...existing entries...
+  context_json: data/context/scene_context.json
 
 device:
   use_cuda: true
@@ -25,19 +27,23 @@ recognition:
   preroll_frames: 5         # frames kept from before motion started
   tail_frames: 3            # still frames kept after the last motion
   preview_interval: 6       # live guess every N frames (display only, never commits)
-  accept_confidence: 0.70   # tune on validation data
-  min_margin: 0.15          # top-1 must beat top-2 by this much
+  accept_confidence: 0.50   # tune on validation data
+  min_margin: 0.20          # top-1 must beat top-2 by this much
 
 motion:
   velocity_threshold: 0.004
-  start_frames: 3           # consecutive moving frames needed to start a sign
-  smoothing: 0.5            # 0 to 1, higher reacts faster
+  start_frames: 3           # moving frames needed...
+  start_window: 5           # ...out of this many recent frames
+  smoothing: 0.5
   require_raised_hands: true
-  rest_line: 0.9            # wrist y (0 = top, 1 = bottom) below which hands count as resting;
-                            # used when hips aren't visible, try 0.75 if you sit close to the camera
+  use_hip_line: false       # true = use hip position as the resting line when hips are visible
+  rest_line: 0.9            # wrist y (0 = top, 1 = bottom) below which a hand counts as resting
   word_pause_seconds: 0.4
   sentence_pause_seconds: 1.2
 
 context:
   model: ViT-B/32
-  scene_interval_seconds: 3.0
+  scene_interval_seconds: 3.0   # how often a frame is analyzed
+  smoothing_window: 2           # average the last N detections to stop the scene flickering
+  object_top_k: 3               # objects listed in visual_context
+  object_min_similarity: 0.20   # minimum CLIP match for an object to be listed

@@ -25,6 +25,8 @@ class SignSegmenter:
 
         self.velocity_threshold = mot["velocity_threshold"]
         self.start_frames = mot["start_frames"]
+        self.start_window = mot.get("start_window", 5)
+        self.use_hip_line = mot.get("use_hip_line", False)
         self.smoothing = mot["smoothing"]
         self.require_raised = mot["require_raised_hands"]
         self.rest_line = mot["rest_line"]
@@ -38,6 +40,8 @@ class SignSegmenter:
         self._clear_segment()
         self.prev = None
         self.speed = 0.0
+        self.seen = [False, False]      # debug: hands detected in the last frame
+        self.raised = [False, False]    # debug: hands counted as raised
         self.last_motion_time = time.monotonic()
 
     # Drop the segment in progress but keep motion tracking state.
@@ -45,7 +49,7 @@ class SignSegmenter:
         self.signing = False
         self.frames = []
         self.preroll.clear()
-        self.streak = 0
+        self.recent = deque(maxlen=self.start_window)   # moving flags of the last few frames
         self.last_motion_idx = 0
 
     @property
@@ -63,12 +67,15 @@ class SignSegmenter:
     # Which hands are visible and above the resting line.
     def _raised_hands(self, f):
         hips_visible = f[HIP_VISIBILITY[0]] >= 0.5 and f[HIP_VISIBILITY[1]] >= 0.5
-        rest_y = (f[HIP_Y[0]] + f[HIP_Y[1]]) / 2 if hips_visible else self.rest_line
+        use_hips = self.use_hip_line and hips_visible
+        rest_y = (f[HIP_Y[0]] + f[HIP_Y[1]]) / 2 if use_hips else self.rest_line
 
-        flags = []
+        flags, seen = [], []
         for hand, wrist_y in ((LEFT_HAND, WRIST_Y[0]), (RIGHT_HAND, WRIST_Y[1])):
             present = bool(f[hand].any())
+            seen.append(present)
             flags.append(present and (not self.require_raised or f[wrist_y] < rest_y))
+        self.seen = seen
         return flags
 
     # Smoothed x/y speed of raised hands; ignores hands that just appeared.
@@ -87,6 +94,7 @@ class SignSegmenter:
     # Feed one frame; returns a finished clip (frames, 291) or None.
     def update(self, features, now):
         raised = self._raised_hands(features)
+        self.raised = raised
         moving = any(raised) and self._speed(features, raised) > self.velocity_threshold
         self.prev = features
 
@@ -95,8 +103,9 @@ class SignSegmenter:
 
         if not self.signing:
             self.preroll.append(features)
-            self.streak = self.streak + 1 if moving else 0
-            if self.streak >= self.start_frames:
+            self.recent.append(moving)
+            # Start when enough of the last few frames were moving; one bad frame won't reset it.
+            if sum(self.recent) >= self.start_frames:
                 self.signing = True
                 self.frames = list(self.preroll)
                 self.last_motion_idx = len(self.frames) - 1

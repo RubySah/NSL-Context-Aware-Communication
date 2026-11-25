@@ -99,6 +99,11 @@ def main():
             put_text(frame, f"Scene: {scene} ({scene_score:.0f}%)", 140)
             put_text(frame, f"Sentence: {sentence.display()}", frame.shape[0] - 30,
                      (0, 255, 255), 0.65)
+            motion_cfg = config["motion"]
+            put_text(frame, f"Speed: {segmenter.speed:.4f}  (needs > {motion_cfg['velocity_threshold']})", 175)
+            put_text(frame, f"Seen L/R: {segmenter.seen}  Raised L/R: {segmenter.raised}  "
+                            f"Start: {sum(segmenter.recent)}/{motion_cfg['start_frames']}", 210, scale=0.5)
+            put_text(frame, f"Objects: {', '.join(scene_detector.context['visual_context']) or '--'}", 245)
 
             cv2.imshow("NSL Real-Time Recognition", frame)
             key = cv2.waitKey(1) & 0xFF

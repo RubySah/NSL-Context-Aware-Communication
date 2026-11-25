@@ -1,0 +1,92 @@
+{
+  "timestamp": "2026-11-25T16:18:46",
+  "gesture": {
+    "gloss": [
+      "I or Me",
+      "I or Me",
+      "I or Me",
+      "I or Me"
+    ],
+    "words": [
+      {
+        "word": "I or Me",
+        "confidence": 0.67,
+        "level": "medium",
+        "alternatives": [
+          {
+            "word": "Doctor",
+            "confidence": 0.15
+          },
+          {
+            "word": "We",
+            "confidence": 0.14
+          }
+        ],
+        "domain": "general"
+      },
+      {
+        "word": "I or Me",
+        "confidence": 0.55,
+        "level": "low",
+        "alternatives": [
+          {
+            "word": "We",
+            "confidence": 0.17
+          },
+          {
+            "word": "Doctor",
+            "confidence": 0.15
+          }
+        ],
+        "domain": "general"
+      },
+      {
+        "word": "I or Me",
+        "confidence": 0.67,
+        "level": "medium",
+        "alternatives": [
+          {
+            "word": "Doctor",
+            "confidence": 0.23
+          },
+          {
+            "word": "We",
+            "confidence": 0.04
+          }
+        ],
+        "domain": "general"
+      },
+      {
+        "word": "I or Me",
+        "confidence": 0.62,
+        "level": "medium",
+        "alternatives": [
+          {
+            "word": "We",
+            "confidence": 0.17
+          },
+          {
+            "word": "Doctor",
+            "confidence": 0.17
+          }
+        ],
+        "domain": "general"
+      }
+    ],
+    "mean_confidence": 0.63,
+    "min_confidence": 0.55,
+    "level": "low"
+  },
+  "context": {
+    "environment": "classroom / library",
+    "confidence": 0.42,
+    "domain": "education",
+    "reliable": false
+  },
+  "task": {
+    "gesture_domain": "general",
+    "domain_counts": {},
+    "context_matches_gesture": null,
+    "context_needed": true
+  }
+}

@@ -1,3 +1,4 @@
+# src/main.py
 """Real-time Nepali Sign Language recognition."""
 
 import time
@@ -11,6 +12,7 @@ from src.training.predictor import SignPredictor
 from src.context.scene_detection import SceneDetector
 from src.continuous_recognition.segmenter import SignSegmenter, accept_prediction
 from src.continuous_recognition.sentence_manager import SentenceManager
+from src.fusion.task_fusion import TaskFusion
 
 
 # Draw one line of overlay text.
@@ -18,9 +20,24 @@ def put_text(frame, text, y, color=(255, 255, 255), scale=0.6):
     cv2.putText(frame, text, (20, y), cv2.FONT_HERSHEY_SIMPLEX, scale, color, 2)
 
 
+# Finish the sentence, fuse it with the current scene, and save the result.
+def fuse_sentence(sentence, fusion, scene_detector):
+    entries = sentence.finalize()
+    if not entries:
+        return None
+
+    fused = fusion.fuse(entries, scene_detector.context)
+    fusion.save(fused)
+    print(f"fused: {fused['gesture']['gloss']} | {fused['gesture']['level']} | "
+          f"{fused['context']['environment']} | "
+          f"context needed: {fused['task']['context_needed']}")
+    return fused
+
+
 def main():
     config = load_config()
     rec = config["recognition"]
+    motion_cfg = config["motion"]
 
     extractor = LandmarkExtractor()
     visualizer = LandmarkVisualizer()
@@ -28,6 +45,7 @@ def main():
     scene_detector = SceneDetector(config)
     segmenter = SignSegmenter(config)
     sentence = SentenceManager(config["paths"]["sentence_log"])
+    fusion = TaskFusion(config)
 
     camera = cv2.VideoCapture(0)
     if not camera.isOpened():
@@ -38,6 +56,7 @@ def main():
     frame_count = 0
     preview = ("--", 0.0)          # live guess while signing
     last_result = "waiting for a sign"
+    fused = None                   # latest fused record, for the overlay
 
     try:
         while True:
@@ -76,19 +95,23 @@ def main():
                       f"{'COMMIT ' + word if word else 'rejected: ' + info}")
 
                 if word:
-                    sentence.commit(word)
+                    sentence.commit(
+                        word,
+                        result["top3"][0][1] / 100,
+                        [(n, s / 100) for n, s in result["top3"][1:]],
+                    )
                     last_result = f"{word} ({info})"
                 else:
                     last_result = f"rejected: {info}"
                 preview = ("--", 0.0)
 
-            # A long pause with no motion ends the sentence.
+            # A long pause with no motion ends the sentence and triggers fusion.
             if (
                 sentence.words
                 and not segmenter.signing
-                and segmenter.idle_for(now) >= config["motion"]["sentence_pause_seconds"]
+                and segmenter.idle_for(now) >= motion_cfg["sentence_pause_seconds"]
             ):
-                sentence.finalize()
+                fused = fuse_sentence(sentence, fusion, scene_detector) or fused
 
             state = f"SIGNING ({segmenter.length} frames)" if segmenter.signing else "IDLE"
             state_color = (0, 165, 255) if segmenter.signing else (200, 200, 200)
@@ -97,19 +120,23 @@ def main():
             put_text(frame, f"Guess: {preview[0]} ({preview[1]:.0f}%)", 70, (0, 255, 0))
             put_text(frame, f"Last: {last_result}", 105)
             put_text(frame, f"Scene: {scene} ({scene_score:.0f}%)", 140)
-            put_text(frame, f"Sentence: {sentence.display()}", frame.shape[0] - 30,
-                     (0, 255, 255), 0.65)
-            motion_cfg = config["motion"]
             put_text(frame, f"Speed: {segmenter.speed:.4f}  (needs > {motion_cfg['velocity_threshold']})", 175)
             put_text(frame, f"Seen L/R: {segmenter.seen}  Raised L/R: {segmenter.raised}  "
                             f"Start: {sum(segmenter.recent)}/{motion_cfg['start_frames']}", 210, scale=0.5)
             put_text(frame, f"Objects: {', '.join(scene_detector.context['visual_context']) or '--'}", 245)
 
+            if fused:
+                put_text(frame, f"Fused: {' '.join(fused['gesture']['gloss'])} "
+                                f"[{fused['gesture']['level']}]", 280, (255, 200, 0), 0.5)
+
+            put_text(frame, f"Sentence: {sentence.display()}", frame.shape[0] - 30,
+                     (0, 255, 255), 0.65)
+
             cv2.imshow("NSL Real-Time Recognition", frame)
             key = cv2.waitKey(1) & 0xFF
 
             if key == ord("q"):
-                sentence.finalize()
+                fuse_sentence(sentence, fusion, scene_detector)
                 break
 
             if key == ord(" "):
@@ -117,6 +144,7 @@ def main():
                 sentence.reset()
                 preview = ("--", 0.0)
                 last_result = "cleared"
+                fused = None
 
     finally:
         camera.release()

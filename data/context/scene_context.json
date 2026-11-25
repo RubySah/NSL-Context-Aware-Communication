@@ -1,0 +1,9 @@
+{
+  "environment": "classroom / library",
+  "environment_confidence": 0.45,
+  "visual_context": [
+    "student desks",
+    "bookshelves",
+    "projector screen"
+  ]
+}

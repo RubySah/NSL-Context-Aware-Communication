@@ -1,6 +1,6 @@
 project:
   num_classes: 52
-  feature_dim: 291
+  feature_dim: 199
   fixed_length: 100
 
 model:
@@ -15,8 +15,8 @@ paths:
   class_mapping: data/metadata/class_mapping.json
   checkpoint: models/gesture_transformer/best/best_model3.pth
   sentence_log: logs/detected_sentences.txt
-  # ...existing entries...
   context_json: data/context/scene_context.json
+  fusion_json: data/context/fusion_output.json
 
 device:
   use_cuda: true
@@ -47,3 +47,8 @@ context:
   smoothing_window: 2           # average the last N detections to stop the scene flickering
   object_top_k: 3               # objects listed in visual_context
   object_min_similarity: 0.20   # minimum CLIP match for an object to be listed
+
+fusion:
+  high_confidence: 0.80         # at or above: gesture trusted on its own
+  low_confidence: 0.60          # below: weakest word is shaky, context may help
+  min_scene_confidence: 0.50    # scene must beat this to count as reliable

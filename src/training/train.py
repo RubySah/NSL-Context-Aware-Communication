@@ -10,6 +10,7 @@ import torch.nn as nn
 from torch.utils.data import Dataset, DataLoader
 
 from model import SignLanguageTransformer
+from src.preprocessing.features import NORM_DIM, normalize_sequence
 
 # ── Config ───────────────────────────────────────────────────
 DATA_PATH      = r"D:\Ruby\projects\Major Project\NSL_Context_Aware_Communication\data\final_dataset"
@@ -119,12 +120,12 @@ class NSLDataset(Dataset):
         return len(self.sequences)
 
     def __getitem__(self, idx):
-        seq = self.sequences[idx]
+        seq = normalize_sequence(seq)
         if self.train:
             seq = augment(seq)
 
         length = min(len(seq), FIXED_LEN)
-        padded = np.zeros((FIXED_LEN, FEAT_DIM), dtype=np.float32)
+        padded = np.zeros((FIXED_LEN, NORM_DIM), dtype=np.float32)
         padded[:length] = seq[:length]  # left-aligned, matches the model's mask
 
         return torch.from_numpy(padded), length, self.labels[idx]

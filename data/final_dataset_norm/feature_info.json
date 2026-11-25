@@ -1,0 +1,5 @@
+{
+  "feature_dim": 199,
+  "raw_dim": 291,
+  "normalizer": "normalize_sequence"
+}

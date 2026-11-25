@@ -9,45 +9,39 @@ from src.mediapipe_extraction.landmark_extractor import LandmarkExtractor
 from src.mediapipe_extraction.landmark_visualizer import LandmarkVisualizer
 from src.training.predictor import SignPredictor
 from src.context.scene_detection import SceneDetector
-from src.continuous_recognition.buffer import SequenceBuffer
-from src.continuous_recognition.motion import MotionTracker
+from src.continuous_recognition.segmenter import SignSegmenter, accept_prediction
 from src.continuous_recognition.sentence_manager import SentenceManager
-from src.continuous_recognition.recognition import RecognitionManager
+
+
+# Draw one line of overlay text.
+def put_text(frame, text, y, color=(255, 255, 255), scale=0.6):
+    cv2.putText(frame, text, (20, y), cv2.FONT_HERSHEY_SIMPLEX, scale, color, 2)
 
 
 def main():
     config = load_config()
+    rec = config["recognition"]
 
     extractor = LandmarkExtractor()
     visualizer = LandmarkVisualizer()
     predictor = SignPredictor(config)
     scene_detector = SceneDetector(config)
-
-    settings = config["recognition"]
-
-    buffer = SequenceBuffer(settings["max_frames"])
-    motion = MotionTracker(
-        config["motion"]["velocity_threshold"]
-    )
-    sentence = SentenceManager(
-        config["paths"]["sentence_log"]
-    )
-    recognition = RecognitionManager(config)
+    segmenter = SignSegmenter(config)
+    sentence = SentenceManager(config["paths"]["sentence_log"])
 
     camera = cv2.VideoCapture(0)
-
     if not camera.isOpened():
         extractor.close()
+        scene_detector.close()
         raise RuntimeError("Could not open camera.")
 
     frame_count = 0
-    last_motion_time = time.monotonic()
-    last_commit_time = 0.0
+    preview = ("--", 0.0)          # live guess while signing
+    last_result = "waiting for a sign"
 
     try:
         while True:
             success, frame = camera.read()
-
             if not success:
                 break
 
@@ -55,110 +49,58 @@ def main():
             now = time.monotonic()
 
             scene, scene_score = scene_detector.update(frame)
-
-            timestamp_ms = int(now * 1000)
-
-            features, hand_detected, results = extractor.extract(frame)
-
+            features, _, results = extractor.extract(frame)
             frame = visualizer.draw(frame, results)
 
-            if hand_detected:
-                buffer.add(features)
+            clip = segmenter.update(features, now)
 
-                if motion.is_moving(features):
-                    last_motion_time = now
-            else:
-                motion.reset()
-
-            stillness = now - last_motion_time
-
+            # Live preview on the partial clip: shown on screen, never committed.
             if (
-                len(buffer) >= settings["min_frames"]
-                and recognition.should_check(
-                    len(buffer), frame_count
-                )
+                segmenter.signing
+                and segmenter.length >= rec["min_frames"]
+                and frame_count % rec["preview_interval"] == 0
             ):
-                result = predictor.predict(buffer.get())
-                recognition.update(result, frame_count)
+                guess = predictor.predict(segmenter.current())
+                if guess:
+                    preview = (guess["label"], guess["confidence"])
 
-            if (
-                recognition.should_commit(len(buffer))
-                and (
-                    stillness >= config["motion"]["word_pause_seconds"]
-                    or len(buffer) >= settings["max_frames"]
-                    or now - last_commit_time >= 1.0
+            # A finished clip is classified once and committed only if clearly confident.
+            if clip is not None:
+                result = predictor.predict(clip)
+                word, info = accept_prediction(
+                    result, rec["accept_confidence"], rec["min_margin"]
                 )
-            ):
-                word = recognition.stable_prediction()
 
-                if sentence.commit(word):
-                    last_commit_time = now
+                top3 = ", ".join(f"{n} {s:.0f}%" for n, s in result["top3"]) if result else "-"
+                print(f"clip of {len(clip)} frames -> {top3} -> "
+                      f"{'COMMIT ' + word if word else 'rejected: ' + info}")
 
-                buffer.clear()
-                motion.reset()
-                recognition.reset()
+                if word:
+                    sentence.commit(word)
+                    last_result = f"{word} ({info})"
+                else:
+                    last_result = f"rejected: {info}"
+                preview = ("--", 0.0)
 
+            # A long pause with no motion ends the sentence.
             if (
                 sentence.words
-                and stillness >= config["motion"]["sentence_pause_seconds"]
+                and not segmenter.signing
+                and segmenter.idle_for(now) >= config["motion"]["sentence_pause_seconds"]
             ):
                 sentence.finalize()
-                buffer.clear()
-                motion.reset()
-                recognition.reset()
 
-            cv2.putText(
-                frame,
-                f"Sign: {recognition.prediction or '--'}",
-                (20, 35),
-                cv2.FONT_HERSHEY_SIMPLEX,
-                0.8,
-                (0, 255, 0),
-                2,
-            )
+            state = f"SIGNING ({segmenter.length} frames)" if segmenter.signing else "IDLE"
+            state_color = (0, 165, 255) if segmenter.signing else (200, 200, 200)
 
-            cv2.putText(
-                frame,
-                f"Confidence: {recognition.confidence:.1f}%",
-                (20, 70),
-                cv2.FONT_HERSHEY_SIMPLEX,
-                0.6,
-                (255, 255, 255),
-                2,
-            )
-
-            cv2.putText(
-                frame,
-                f"Scene: {scene} ({scene_score:.1f}%)",
-                (20, 105),
-                cv2.FONT_HERSHEY_SIMPLEX,
-                0.6,
-                (255, 255, 255),
-                2,
-            )
-
-            cv2.putText(
-                frame,
-                f"Sentence: {sentence.display()}",
-                (20, frame.shape[0] - 30),
-                cv2.FONT_HERSHEY_SIMPLEX,
-                0.65,
-                (0, 255, 255),
-                2,
-            )
-
-            cv2.putText(
-                frame,
-                f"Buffer: {len(buffer)}/{settings['max_frames']}",
-                (20, 140),
-                cv2.FONT_HERSHEY_SIMPLEX,
-                0.6,
-                (255, 255, 255),
-                2,
-            )
+            put_text(frame, f"State: {state}", 35, state_color, 0.7)
+            put_text(frame, f"Guess: {preview[0]} ({preview[1]:.0f}%)", 70, (0, 255, 0))
+            put_text(frame, f"Last: {last_result}", 105)
+            put_text(frame, f"Scene: {scene} ({scene_score:.0f}%)", 140)
+            put_text(frame, f"Sentence: {sentence.display()}", frame.shape[0] - 30,
+                     (0, 255, 255), 0.65)
 
             cv2.imshow("NSL Real-Time Recognition", frame)
-
             key = cv2.waitKey(1) & 0xFF
 
             if key == ord("q"):
@@ -166,15 +108,15 @@ def main():
                 break
 
             if key == ord(" "):
-                buffer.clear()
-                motion.reset()
-                recognition.reset()
+                segmenter.reset()
                 sentence.reset()
-                last_motion_time = time.monotonic()
+                preview = ("--", 0.0)
+                last_result = "cleared"
 
     finally:
         camera.release()
         extractor.close()
+        scene_detector.close()
         cv2.destroyAllWindows()
 
 

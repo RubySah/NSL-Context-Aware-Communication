@@ -1,92 +1,41 @@
 {
-  "timestamp": "2026-11-25T16:18:46",
+  "timestamp": "2026-11-27T12:39:08",
   "gesture": {
     "gloss": [
-      "I or Me",
-      "I or Me",
-      "I or Me",
-      "I or Me"
+      "Home"
     ],
     "words": [
       {
-        "word": "I or Me",
-        "confidence": 0.67,
-        "level": "medium",
+        "word": "Home",
+        "confidence": 0.96,
+        "level": "high",
         "alternatives": [
           {
-            "word": "Doctor",
-            "confidence": 0.15
+            "word": "Nurse",
+            "confidence": 0.01
           },
           {
-            "word": "We",
-            "confidence": 0.14
-          }
-        ],
-        "domain": "general"
-      },
-      {
-        "word": "I or Me",
-        "confidence": 0.55,
-        "level": "low",
-        "alternatives": [
-          {
-            "word": "We",
-            "confidence": 0.17
-          },
-          {
-            "word": "Doctor",
-            "confidence": 0.15
-          }
-        ],
-        "domain": "general"
-      },
-      {
-        "word": "I or Me",
-        "confidence": 0.67,
-        "level": "medium",
-        "alternatives": [
-          {
-            "word": "Doctor",
-            "confidence": 0.23
-          },
-          {
-            "word": "We",
-            "confidence": 0.04
-          }
-        ],
-        "domain": "general"
-      },
-      {
-        "word": "I or Me",
-        "confidence": 0.62,
-        "level": "medium",
-        "alternatives": [
-          {
-            "word": "We",
-            "confidence": 0.17
-          },
-          {
-            "word": "Doctor",
-            "confidence": 0.17
+            "word": "Strong",
+            "confidence": 0.0
           }
         ],
         "domain": "general"
       }
     ],
-    "mean_confidence": 0.63,
-    "min_confidence": 0.55,
-    "level": "low"
+    "mean_confidence": 0.96,
+    "min_confidence": 0.96,
+    "level": "high"
   },
   "context": {
     "environment": "classroom / library",
-    "confidence": 0.42,
+    "confidence": 0.71,
     "domain": "education",
-    "reliable": false
+    "reliable": true
   },
   "task": {
     "gesture_domain": "general",
     "domain_counts": {},
-    "context_matches_gesture": null,
-    "context_needed": true
+    "context_matches_gesture": false,
+    "context_needed": false
   }
 }

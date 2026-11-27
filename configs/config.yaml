@@ -13,7 +13,7 @@ model:
 paths:
   dataset: data/final_dataset
   class_mapping: data/metadata/class_mapping.json
-  checkpoint: models/gesture_transformer/best/best_model3.pth
+  checkpoint: models/gesture_transformer/best/best_model4.pth
   sentence_log: logs/detected_sentences.txt
   context_json: data/context/scene_context.json
   fusion_json: data/context/fusion_output.json
@@ -22,23 +22,23 @@ device:
   use_cuda: true
 
 recognition:
-  min_frames: 15            # shorter clips are discarded as noise
+  min_frames: 10            # shorter clips are discarded as noise
   max_frames: 90            # force-classify a clip this long (must be <= project.fixed_length)
   preroll_frames: 5         # frames kept from before motion started
-  tail_frames: 3            # still frames kept after the last motion
+  tail_frames: 5            # still frames kept after the last motion
   preview_interval: 6       # live guess every N frames (display only, never commits)
   accept_confidence: 0.50   # tune on validation data
   min_margin: 0.20          # top-1 must beat top-2 by this much
 
 motion:
-  velocity_threshold: 0.004
+  velocity_threshold: 0.002
   start_frames: 3           # moving frames needed...
-  start_window: 5           # ...out of this many recent frames
+  start_window: 3           # ...out of this many recent frames
   smoothing: 0.5
   require_raised_hands: true
   use_hip_line: false       # true = use hip position as the resting line when hips are visible
-  rest_line: 0.9            # wrist y (0 = top, 1 = bottom) below which a hand counts as resting
-  word_pause_seconds: 0.4
+  rest_line: 0.95            # wrist y (0 = top, 1 = bottom) below which a hand counts as resting
+  word_pause_seconds: 0.3
   sentence_pause_seconds: 1.2
 
 context:
@@ -46,7 +46,7 @@ context:
   scene_interval_seconds: 3.0   # how often a frame is analyzed
   smoothing_window: 2           # average the last N detections to stop the scene flickering
   object_top_k: 3               # objects listed in visual_context
-  object_min_similarity: 0.20   # minimum CLIP match for an object to be listed
+  object_min_similarity: 0.50   # minimum CLIP match for an object to be listed
 
 fusion:
   high_confidence: 0.80         # at or above: gesture trusted on its own

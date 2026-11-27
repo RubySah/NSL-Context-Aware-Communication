@@ -19,7 +19,7 @@ CHECKPOINT     = r"models\gesture_transformer\best\best_model2.pth"
 HISTORY_PATH   = r"models\gesture_transformer\best\train_history2.json"
 
 FIXED_LEN   = 100
-FEAT_DIM    = 291
+FEAT_DIM    = 199
 BATCH_SIZE  = 32
 EPOCHS      = 180
 LR          = 0.0001
